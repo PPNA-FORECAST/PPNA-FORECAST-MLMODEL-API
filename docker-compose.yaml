@@ -1,0 +1,17 @@
+version: '3.8'
+
+services:
+
+  ml-api:
+    build: . 
+    command: python -u app.py 
+    ports: 
+      - 4000:5000
+    volumes:
+      - .:/ppnaforecast-ml-api
+    networks:
+      - vnet1
+
+networks:
+  vnet1:
+    driver: bridge

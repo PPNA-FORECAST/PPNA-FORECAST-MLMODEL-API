@@ -1,0 +1,6 @@
+flask
+python-dotenv
+flask_cors
+jsonschema
+flask_jwt_extended
+cryptography
