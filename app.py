@@ -1,8 +1,10 @@
 import os
-import datetime
+import tensorflow as tf
+import keras 
 from flask import Flask 
 from flask_jwt_extended import JWTManager
 from api.errors.errors import *
+from api.route.ppna_forecast_route import ppna_forecast_bp
 from dotenv import load_dotenv
 from flask_cors import CORS
 
@@ -14,19 +16,13 @@ CORS(app, resources={r"/api/*": {"origins": "*"}})  # Allow request regardless t
 load_dotenv()
 
 ### JWT 
-app.config['JWT_PRIVATE_KEY'] = open(os.environ.get('PRIVATE_KEY_PATH')).read()
 app.config['JWT_PUBLIC_KEY'] = open(os.environ.get('PUBLIC_KEY_PATH')).read()
-app.config['JWT_ALGORITHM'] = os.environ.get('ENCRYPT_ALG')
-app.config['JWT_ACCESS_TOKEN_EXPIRES'] = datetime.timedelta(days=1) # Define the lifespan of the token
+#app.config['JWT_ALGORITHM'] = os.environ.get('ENCRYPT_ALG')
+app.config['JWT_ALGORITHM'] = 'RS256'
 jwt = JWTManager(app)
 
 ### Blueprints 
-#app.register_blueprint(user_bp)
-#app.register_blueprint(ppna_bp)
-
-@app.route('/')
-def hello_world():
-    return 'Hello, World!'
+app.register_blueprint(ppna_forecast_bp)
 
 
 ### Errors
