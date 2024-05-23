@@ -17,10 +17,16 @@ def get_ppna_forecast_point():
     #validar! 
     #falta el service
     data = request.json
-    for location in data['location']:
+    ppna_forecast = PpnaForecast()
+    #itero sobre cada location para devolverlo por location
+    for location in data.items():
         
-        #points = PpnaForecast.load_ppna_points(data)
-        points = PpnaForecast.prepare_sequence_point(data)
+        points = ppna_forecast.load_ppna_points(data)
+        points = ppna_forecast.date_to_date_signal(points)
+        points_sequence = ppna_forecast.prepare_sequence_point(points)
+        points_forecast = ppna_forecast.forecast_ppna(points_sequence)
+        #ver como delvolver esto tipo {location:[lat:xx,long:yy,sample:[date:a, ppna:1], ..], ..}
+
     return "points",200
 
 """
