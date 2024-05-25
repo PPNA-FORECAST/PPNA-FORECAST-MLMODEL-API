@@ -1,10 +1,13 @@
 from werkzeug.exceptions import NotFound, Forbidden, Conflict, Unauthorized, BadRequest
 import keras
-import tensorflow as tf
-import numpy as np 
 import pandas as pd
+import numpy as np
 import os
 from dotenv import load_dotenv
+from pandas import json_normalize
+from datetime import datetime, timedelta
+
+
 
 class PpnaForecast:
 
@@ -40,31 +43,24 @@ class PpnaForecast:
     """
     def load_ppna_points(self, data_json):       
 
-        #convierto el json que me llega en un data frame para el modelo 
-        points_df = pd.DataFrame(data_json['location']['sample'], columns=['sample'])
-        
-        
-        # Dividir la columna 'sample' en cuatro columnas 'date' y 'ppna'
-        points_df = points_df['sample'].str.extract(r'date=(.*?); ppna=(.*?); ppt=(.*?); temp=(.*?)\}')
-        points_df.columns = ['date_signal', 'ppna', 'ppt', 'temp']
+        # Extraer las columnas 'latitude' y 'longitude' de los datos JSON
+        latitude = data_json['location']['latitude']
+        longitude = data_json['location']['longitude']
 
-        # Convertir las columnas al tipo float y saco caracteres no numericos 
-        points_df['ppna'] = points_df['ppna'].str.replace('[^\d.]', '', regex=True).astype(float)
-        points_df['ppt'] = points_df['ppt'].str.replace('[^\d.]', '', regex=True).astype(float)
-        points_df['temp'] = points_df['temp'].str.replace('[^\d.]', '', regex=True).astype(float)
+        # Aplanar la lista de diccionarios dentro de 'sample'
+        sample_list = data_json['location']['sample']
+        flattened_data = json_normalize(sample_list)
 
-        # Convertir 'date_signal' a datetime
-        points_df['date_signal'] = pd.to_datetime(points_df['date_signal'], format='%m/%d/%Y')
+        # Agregar las columnas 'latitude' y 'longitude' al DataFrame aplanado
+        flattened_data['latitude'] = latitude
+        flattened_data['longitude'] = longitude
 
-        # Agregar las columnas 'latitude' y 'longitude'
-        points_df['latitude'] = float(data_json['location']['latitude'])
-        points_df['longitude'] = float(data_json['location']['longitude'])
-
-        # Reordenar las columnas
-        points_df = points_df[['date_signal', 'latitude', 'longitude', 'temp', 'ppt', 'ppna']]
+        # Crear el DataFrame con los datos aplanados y las columnas 'latitude' y 'longitude'
+        points_df = pd.DataFrame(flattened_data, columns=['latitude', 'longitude', 'temp', 'ppt', 'ppna','date'])
+        points_df['date'] = pd.to_datetime(points_df['date'], format='%m/%d/%Y', errors='coerce')
 
         # Ordenar por fecha
-        points_df = points_df.sort_values(by='date_signal')
+        points_df = points_df.sort_values(by='date', ascending=True)
 
         return points_df
 
@@ -74,12 +70,13 @@ class PpnaForecast:
     def date_to_date_signal(self, points_df): 
 
         #convert date to timestamp
-        points_df['date_signal'] = pd.to_datetime(points_df['date_signal'], format='%m-%d-%Y').map(pd.Timestamp.timestamp)
+        points_df['date_signal'] = pd.to_datetime(points_df['date'], format='%m-%d-%Y').map(pd.Timestamp.timestamp)
+        points_df = points_df.drop(columns=['date'])
 
         #conver timestamp to a periodic datesignal
         seconds_in_a_year = 24*60*60*365
         points_df['date_signal'] = np.sin(points_df['date_signal'] * (2 * np.pi / seconds_in_a_year))
-        
+
         return points_df
 
     def forecast_ppna(self, sequence_points): 
@@ -87,3 +84,40 @@ class PpnaForecast:
         points_forecast = self.model(sequence_points)
 
         return points_forecast
+    
+    def get_last_date(self, points_df):
+        return points_df['date'].iloc[-1]
+                    
+
+    def format_output(self, forecast, point, last_date): 
+        # Paso 1: Extraer latitud y longitud
+        latitude = point['location']['latitude']
+        longitude = point['location']['longitude']
+        
+        # Paso 2: Crear una lista de diccionarios para las muestras de datos, ordenadas por fecha
+        sample_list = []
+        for data in sorted(point['location']['sample'], key=lambda x: datetime.strptime(x['date'], '%m/%d/%Y')):
+            sample_list.append({'date': data['date'], 'ppna': data['ppna']})
+        
+        # Paso 3: Crear una lista de diccionarios para los pronósticos
+        forecast_list = []
+        tensor = forecast['dense_1']
+
+        # Iterar sobre los valores del tensor
+        for ppna in tensor.numpy()[0]:
+            last_date += timedelta(days=15)
+            last_date_str = last_date.strftime('%Y-%m-%d')
+            forecast_list.append({'date': last_date_str, 'ppna': str(ppna)})
+        
+        # Paso 4: Construir el diccionario de respuesta
+        response = {
+            'location': {
+                'latitude': latitude,
+                'longitude': longitude,
+                'sample': sample_list,
+                'forecast': forecast_list
+            }
+        }
+
+        return response
+

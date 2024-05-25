@@ -10,8 +10,8 @@ services:
     volumes:
       - .:/ppnaforecast-ml-api
     networks:
-      - vnet1
+      - ppna-forecast-mgmt-api_vnet1
 
 networks:
-  vnet1:
-    driver: bridge
+  ppna-forecast-mgmt-api_vnet1:
+    external: true
