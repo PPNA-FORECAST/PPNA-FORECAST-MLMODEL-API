@@ -2,20 +2,19 @@ from werkzeug.exceptions import NotFound, Forbidden, Conflict, Unauthorized, Bad
 import keras
 import pandas as pd
 import numpy as np
-import os
-from dotenv import load_dotenv
+import json
 from pandas import json_normalize
 from datetime import datetime, timedelta
 
 
 
 class PpnaForecast:
-
     #enrealidad model_name y past samples van av enir como parametros desde el service
-    def __init__(self):
-        model_name = os.environ.get('MODEL')
+    def __init__(self, n_past_samples, model_name, mean, std):
         self.model = keras.layers.TFSMLayer(f"./models/{model_name}", call_endpoint='serving_default')
-        self.n_past_samples = int(os.environ.get('N_PAST_SAMPLES'))
+        self.n_past_samples = n_past_samples
+        self.mean = mean
+        self.std = std
 
     """
     This function is key in a LSTM model, prepare the data in form of past observations. For example, if the data is [1,2,3,4,5,6,7,8,9,10], 
@@ -79,17 +78,12 @@ class PpnaForecast:
 
         return points_df
 
-    def forecast_ppna(self, sequence_points): 
-        
-        points_forecast = self.model(sequence_points)
-
-        return points_forecast
-    
     def get_last_date(self, points_df):
         return points_df['date'].iloc[-1]
                     
 
     def format_output(self, forecast, point, last_date): 
+
         # Paso 1: Extraer latitud y longitud
         latitude = point['location']['latitude']
         longitude = point['location']['longitude']
@@ -101,10 +95,10 @@ class PpnaForecast:
         
         # Paso 3: Crear una lista de diccionarios para los pronósticos
         forecast_list = []
-        tensor = forecast['dense_1']
-
+        print(forecast) 
+        
         # Iterar sobre los valores del tensor
-        for ppna in tensor.numpy()[0]:
+        for ppna in forecast[0].numpy():
             last_date += timedelta(days=15)
             last_date_str = last_date.strftime('%Y-%m-%d')
             forecast_list.append({'date': last_date_str, 'ppna': str(ppna)})
@@ -121,3 +115,30 @@ class PpnaForecast:
 
         return response
 
+    def normalize_ppna (self, data):  
+   
+        mean = pd.Series(json.loads(self.mean)) #mean = data.mean()
+        std = pd.Series(json.loads(self.std)) #std = data.std()
+        
+        data[['ppna', 'ppt', 'temp']] = (data[['ppna', 'ppt', 'temp']].apply(pd.to_numeric) - mean) / std
+
+        return data
+    
+    def desnormalize_ppna(self, data): 
+
+        data_desnormalizated = []
+        mean = pd.Series(json.loads(self.mean)) #mean = data.mean()
+        std = pd.Series(json.loads(self.std)) #std = data.std()
+        for element in data['dense_1']:
+            data_element = element * std['ppna'] + mean['ppna']
+            data_desnormalizated.append(data_element)
+        
+        return data_desnormalizated
+    
+
+    def forecast_ppna(self, sequence_points): 
+        
+        points_forecast = self.model(sequence_points)
+
+        return points_forecast
+    
