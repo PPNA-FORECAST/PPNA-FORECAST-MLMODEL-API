@@ -25,8 +25,9 @@ class PpnaForecast:
     """
     def prepare_sequence_point(self, points_df):
         
-        self.n_past_samples
-  
+        features_orden = ['date_signal','latitude', 'longitude', 'ppt', 'temp','ppna']
+        points_df = points_df[features_orden]
+        print(points_df)
         past_data = []  # Window for the past 
         for i in range(points_df.shape[0] - int(self.n_past_samples - 1)):
             a = points_df[i: i + self.n_past_samples] 
